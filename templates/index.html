@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python + Google Maps</title>
+    <style>
+        body { margin: 0; font-family: Arial, sans-serif; }
+        #map { height: 100vh; width: 100%; }
+        .header {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            z-index: 1000;
+        }
+        .controls {
+            background: white;
+            padding: 12px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+        .controls label {
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .controls input {
+            padding: 6px 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 50px;
+            font-size: 14px;
+        }
+        .results {
+            background: white;
+            padding: 12px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+            margin-top: 10px;
+            font-size: 12px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .result-item {
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+            background: #f9f9f9;
+        }
+        .result-item:last-child {
+            border-bottom: none;
+        }
+        .result-title {
+            font-weight: bold;
+            color: #333;
+        }
+        .result-distance {
+            color: #666;
+            font-size: 11px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <h2>🚀 Python Flask + Google Maps</h2>
+    <p>{{ points|length }} custom data points loaded from Python</p>
+    <div class="controls">
+        <label for="kNeighbors">K Neighbors:</label>
+        <input type="number" id="kNeighbors" value="3" min="1" max="10">
+    </div>
+    <div id="results" class="results" style="display: none;">
+        <strong>KNN Results:</strong>
+        <div id="resultsList"></div>
+    </div>
+    <p style="font-size: 12px; color: #666; margin-top: 10px;">Click on the map to find nearest neighbors</p>
+</div>
+
+<div id="map"></div>
+
+<script>
+    let map;
+    let clickMarker = null;
+    let resultMarkers = [];
+
+    function initMap() {
+        // Center the map on Madrid (or your preferred location)
+        map = new google.maps.Map(document.getElementById("map"), {
+            zoom: 13,
+            center: { lat: 40.4168, lng: -3.7038 },
+            mapTypeId: "roadmap"
+        });
+
+        // Load data points from Python (passed via Jinja)
+        const points = {{ points | tojson | safe }};
+
+        points.forEach(point => {
+            const marker = new google.maps.Marker({
+                position: { lat: point.lat, lng: point.lng },
+                map: map,
+                title: point.title,
+                icon: point.icon
+            });
+
+            // Info window
+            const infoWindow = new google.maps.InfoWindow({
+                content: `<h3>${point.title}</h3><p>${point.description}</p>`
+            });
+
+            marker.addListener("click", () => {
+                infoWindow.open(map, marker);
+            });
+        });
+
+        // Add click listener to map for KNN search
+        map.addListener("click", (event) => {
+            performKNNSearch(event.latLng.lat(), event.latLng.lng());
+        });
+    }
+
+    function performKNNSearch(lat, lng) {
+        const k = parseInt(document.getElementById("kNeighbors").value) || 3;
+
+        // Remove previous click marker
+        if (clickMarker) {
+            clickMarker.setMap(null);
+        }
+
+        // Add marker for clicked position
+        clickMarker = new google.maps.Marker({
+            position: { lat: lat, lng: lng },
+            map: map,
+            title: "Search Point",
+            icon: "http://maps.google.com/mapfiles/ms/icons/purple-dot.png"
+        });
+
+        // Make AJAX request to KNN endpoint
+        fetch("/knn_search", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ lat: lat, lng: lng, k: k })
+        })
+        .then(response => response.json())
+        .then(data => {
+            displayKNNResults(data.neighbors);
+        })
+        .catch(error => console.error("Error:", error));
+    }
+
+    function displayKNNResults(neighbors) {
+        // Remove previous result markers
+        resultMarkers.forEach(marker => marker.setMap(null));
+        resultMarkers = [];
+
+        // Show results
+        const resultsDiv = document.getElementById("results");
+        const resultsList = document.getElementById("resultsList");
+        resultsList.innerHTML = "";
+
+        neighbors.forEach((neighbor, index) => {
+            // Add marker for neighbor
+            const resultMarker = new google.maps.Marker({
+                position: { lat: neighbor.lat, lng: neighbor.lng },
+                map: map,
+                title: neighbor.title,
+                label: String(index + 1)
+            });
+            resultMarkers.push(resultMarker);
+
+            // Add to results list
+            const resultItem = document.createElement("div");
+            resultItem.className = "result-item";
+            resultItem.innerHTML = `
+                <div class="result-title">${index + 1}. ${neighbor.title}</div>
+                <div class="result-distance">Distance: ${neighbor.distance.toFixed(4)}°</div>
+                <div style="font-size: 11px; color: #999;">${neighbor.description}</div>
+            `;
+            resultsList.appendChild(resultItem);
+        });
+
+        resultsDiv.style.display = "block";
+    }
+</script>
+
+<!-- Google Maps JS API -->
+<script async
+        src="https://maps.googleapis.com/maps/api/js?key={{ google_maps_key }}&callback=initMap">
+</script>
+
+</body>
+</html>
