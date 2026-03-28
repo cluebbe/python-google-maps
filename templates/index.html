@@ -71,15 +71,32 @@
 <div class="header">
     <h2>🚀 Python Flask + Google Maps</h2>
     <p>{{ points|length }} custom data points loaded from Python</p>
+    
+    <!-- Mode Toggle -->
+    <div class="controls">
+        <label>Mode:</label>
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <label>
+                <input type="radio" name="mode" value="search" checked> Search
+            </label>
+            <label>
+                <input type="radio" name="mode" value="classification"> Classification
+            </label>
+        </div>
+    </div>
+    
     <div class="controls">
         <label for="kNeighbors">K Neighbors:</label>
         <input type="number" id="kNeighbors" value="3" min="1" max="10">
     </div>
+    
     <div id="results" class="results" style="display: none;">
-        <strong>KNN Results:</strong>
+        <strong id="resultsTitle">KNN Results:</strong>
         <div id="resultsList"></div>
     </div>
-    <p style="font-size: 12px; color: #666; margin-top: 10px;">Click on the map to find nearest neighbors</p>
+    <p style="font-size: 12px; color: #666; margin-top: 10px;">
+        <span id="instructionText">Click on the map to find nearest neighbors</span>
+    </p>
 </div>
 
 <div id="map"></div>
@@ -90,17 +107,27 @@
     let resultMarkers = [];
 
     function initMap() {
+        // Simple check for map container
+        const mapDiv = document.getElementById("map");
+        if (!mapDiv) {
+            console.warn("Map container not ready, retrying in 100ms...");
+            setTimeout(initMap, 100);
+            return;
+        }
+
+        console.log("Initializing Google Map...");
+
         // Center the map on Madrid (or your preferred location)
-        map = new google.maps.Map(document.getElementById("map"), {
+        map = new google.maps.Map(mapDiv, {
             zoom: 13,
             center: { lat: 40.4168, lng: -3.7038 },
             mapTypeId: "roadmap"
         });
 
         // Load data points from Python (passed via Jinja)
-        const points = {{ points | tojson | safe }};
+        const mapPoints = {{ points | tojson | safe }};
 
-        points.forEach(point => {
+        mapPoints.forEach(point => {
             const marker = new google.maps.Marker({
                 position: { lat: point.lat, lng: point.lng },
                 map: map,
@@ -118,11 +145,51 @@
             });
         });
 
-        // Add click listener to map for KNN search
+        // Add click listener to map for KNN operations
         map.addListener("click", (event) => {
-            performKNNSearch(event.latLng.lat(), event.latLng.lng());
+            const mode = document.querySelector('input[name="mode"]:checked').value;
+            if (mode === "search") {
+                performKNNSearch(event.latLng.lat(), event.latLng.lng());
+            } else {
+                performKNNClassification(event.latLng.lat(), event.latLng.lng());
+            }
+        });
+
+        console.log("Google Map initialized successfully!");
+    }
+
+    // Initialize mode change listeners after DOM is loaded
+    function initializeModeListeners() {
+        const modeRadios = document.querySelectorAll('input[name="mode"]');
+        if (modeRadios.length === 0) {
+            console.error("Mode radio buttons not found");
+            return;
+        }
+
+        modeRadios.forEach(radio => {
+            radio.addEventListener('change', (event) => {
+                const mode = event.target.value;
+                const instructionText = document.getElementById("instructionText");
+                const resultsTitle = document.getElementById("resultsTitle");
+                
+                if (instructionText && resultsTitle) {
+                    if (mode === "search") {
+                        instructionText.textContent = "Click on the map to find nearest neighbors";
+                        resultsTitle.textContent = "KNN Search Results:";
+                    } else {
+                        instructionText.textContent = "Click on the map to classify the location";
+                        resultsTitle.textContent = "KNN Classification Results:";
+                    }
+                }
+                
+                // Clear previous results
+                clearResults();
+            });
         });
     }
+
+    // Call initialization after Google Maps loads
+    window.addEventListener('load', initializeModeListeners);
 
     function performKNNSearch(lat, lng) {
         const k = parseInt(document.getElementById("kNeighbors").value) || 3;
@@ -137,10 +204,10 @@
             position: { lat: lat, lng: lng },
             map: map,
             title: "Search Point",
-            icon: "http://maps.google.com/mapfiles/ms/icons/purple-dot.png"
+            icon: "http://maps.google.com/mapfiles/ms/icons/yellow-dot.png"
         });
 
-        // Make AJAX request to KNN endpoint
+        // Make AJAX request to KNN search endpoint
         fetch("/knn_search", {
             method: "POST",
             headers: {
@@ -150,15 +217,56 @@
         })
         .then(response => response.json())
         .then(data => {
-            displayKNNResults(data.neighbors);
+            displaySearchResults(data.neighbors);
         })
         .catch(error => console.error("Error:", error));
     }
 
-    function displayKNNResults(neighbors) {
+    function performKNNClassification(lat, lng) {
+        const k = parseInt(document.getElementById("kNeighbors").value) || 3;
+
+        // Remove previous click marker
+        if (clickMarker) {
+            clickMarker.setMap(null);
+        }
+
+        // Add marker for clicked position
+        clickMarker = new google.maps.Marker({
+            position: { lat: lat, lng: lng },
+            map: map,
+            title: "Classification Point",
+            icon: "http://maps.google.com/mapfiles/ms/icons/yellow-dot.png"
+        });
+
+        // Make AJAX request to KNN classification endpoint
+        fetch("/knn_classification", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ lat: lat, lng: lng, k: k })
+        })
+        .then(response => response.json())
+        .then(data => {
+            displayClassificationResults(data);
+        })
+        .catch(error => console.error("Error:", error));
+    }
+
+    function clearResults() {
         // Remove previous result markers
         resultMarkers.forEach(marker => marker.setMap(null));
         resultMarkers = [];
+        
+        // Hide results
+        const resultsDiv = document.getElementById("results");
+        if (resultsDiv) {
+            resultsDiv.style.display = "none";
+        }
+    }
+
+    function displaySearchResults(neighbors) {
+        clearResults();
 
         // Show results
         const resultsDiv = document.getElementById("results");
@@ -185,6 +293,62 @@
             `;
             resultsList.appendChild(resultItem);
         });
+
+        resultsDiv.style.display = "block";
+    }
+
+    function displayClassificationResults(data) {
+        clearResults();
+
+        // Show results
+        const resultsDiv = document.getElementById("results");
+        const resultsList = document.getElementById("resultsList");
+        resultsList.innerHTML = "";
+
+        // Add classification result
+        const classificationItem = document.createElement("div");
+        classificationItem.className = "result-item";
+        classificationItem.innerHTML = `
+            <div class="result-title" style="color: #2e7d32;">Predicted Category: ${data.predicted_category}</div>
+            <div style="font-size: 12px; margin: 5px 0;">
+                <strong>Confidence:</strong><br>
+                Restaurant: ${(data.probabilities.restaurant * 100).toFixed(1)}%<br>
+                Car Workshop: ${(data.probabilities.car_workshop * 100).toFixed(1)}%
+            </div>
+        `;
+        resultsList.appendChild(classificationItem);
+
+        // Add similar points
+        if (data.similar_points.length > 0) {
+            const similarHeader = document.createElement("div");
+            similarHeader.className = "result-item";
+            similarHeader.innerHTML = `<div class="result-title">Similar ${data.predicted_category} locations:</div>`;
+            resultsList.appendChild(similarHeader);
+
+            data.similar_points.forEach((point, index) => {
+                // Add marker for similar point
+                const resultMarker = new google.maps.Marker({
+                    position: { lat: point.lat, lng: point.lng },
+                    map: map,
+                    title: point.title,
+                    label: String(index + 1),
+                    icon: data.predicted_category === "restaurant" ? 
+                        "http://maps.google.com/mapfiles/ms/icons/red-dot.png" : 
+                        "http://maps.google.com/mapfiles/ms/icons/green-dot.png"
+                });
+                resultMarkers.push(resultMarker);
+
+                // Add to results list
+                const resultItem = document.createElement("div");
+                resultItem.className = "result-item";
+                resultItem.innerHTML = `
+                    <div class="result-title">${index + 1}. ${point.title}</div>
+                    <div class="result-distance">Distance: ${point.distance.toFixed(4)}°</div>
+                    <div style="font-size: 11px; color: #999;">${point.description}</div>
+                `;
+                resultsList.appendChild(resultItem);
+            });
+        }
 
         resultsDiv.style.display = "block";
     }
