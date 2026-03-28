@@ -8,6 +8,14 @@ load_dotenv()
 
 app = Flask(__name__)
 
+# Add cache control headers to prevent aggressive caching
+@app.after_request
+def add_cache_headers(response):
+    response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate, public, max-age=0'
+    response.headers['Pragma'] = 'no-cache'
+    response.headers['Expires'] = '0'
+    return response
+
 # === YOUR CUSTOM DATA POINTS ===
 # Format: list of dictionaries with categories for classification
 data_points = [
