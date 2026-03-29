@@ -8,6 +8,27 @@ load_dotenv()
 
 app = Flask(__name__)
 
+# City center for distance feature (Puerta del Sol, Madrid)
+CITY_CENTER = (40.4168, -3.7038)
+
+def haversine_distance(lat1, lng1, lat2, lng2):
+    """Calculate distance between two points in kilometers"""
+    R = 6371  # Earth's radius in km
+    lat1, lng1, lat2, lng2 = map(np.radians, [lat1, lng1, lat2, lng2])
+    dlat = lat2 - lat1
+    dlng = lng2 - lng1
+    a = np.sin(dlat/2)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlng/2)**2
+    c = 2 * np.arcsin(np.sqrt(a))
+    return R * c
+
+def get_feature_vector(lat, lng, use_city_center=False):
+    """Create feature vector with location and optionally distance to city center"""
+    if use_city_center:
+        dist_to_center = haversine_distance(lat, lng, CITY_CENTER[0], CITY_CENTER[1])
+        return [lat, lng, dist_to_center]
+    else:
+        return [lat, lng]
+
 # Add cache control headers to prevent aggressive caching
 @app.after_request
 def add_cache_headers(response):
@@ -104,20 +125,20 @@ def knn_search():
     lat = data.get("lat")
     lng = data.get("lng")
     k = data.get("k", 3)  # Default to 3 neighbors
+    use_city_center = data.get("use_city_center", False)
     
     if lat is None or lng is None:
         return jsonify({"error": "Missing lat/lng"}), 400
     
-    # Extract coordinates from data points
-    X = np.array([[point["lat"], point["lng"]] for point in data_points])
+    # Extract feature vectors from data points
+    X = np.array([get_feature_vector(point["lat"], point["lng"], use_city_center) for point in data_points])
     
-    # For haversine, coordinates need to be in radians
-    knn = NearestNeighbors(n_neighbors=min(k, len(data_points)), 
-                      metric='haversine')
+    # Find nearest neighbors using Euclidean distance
+    knn = NearestNeighbors(n_neighbors=min(k, len(data_points)), metric='euclidean')
     knn.fit(X)
     
     # Query point
-    query_point = np.array([[lat, lng]])
+    query_point = np.array([get_feature_vector(lat, lng, use_city_center)]).reshape(1, -1)
     
     # Find nearest neighbors
     distances, indices = knn.kneighbors(query_point)
@@ -148,20 +169,21 @@ def knn_classification():
     lat = data.get("lat")
     lng = data.get("lng")
     k = data.get("k", 3)  # Default to 3 neighbors
+    use_city_center = data.get("use_city_center", False)
     
     if lat is None or lng is None:
         return jsonify({"error": "Missing lat/lng"}), 400
     
-    # Extract coordinates and labels from data points
-    X = np.array([[point["lat"], point["lng"]] for point in data_points])
+    # Extract feature vectors and labels from data points
+    X = np.array([get_feature_vector(point["lat"], point["lng"], use_city_center) for point in data_points])
     y = np.array([point["category"] for point in data_points])
     
-    # Create KNN classifier
-    knn_classifier = KNeighborsClassifier(n_neighbors=min(k, len(data_points)))
+    # Create KNN classifier with Euclidean distance
+    knn_classifier = KNeighborsClassifier(n_neighbors=min(k, len(data_points)), metric='euclidean')
     knn_classifier.fit(X, y)
     
     # Query point
-    query_point = np.array([[lat, lng]])
+    query_point = np.array([get_feature_vector(lat, lng, use_city_center)]).reshape(1, -1)
     
     # Predict category
     predicted_category = knn_classifier.predict(query_point)[0]
@@ -172,11 +194,11 @@ def knn_classification():
     
     # Find similar points of the predicted category
     category_points = [point for point in data_points if point["category"] == predicted_category]
-    X_category = np.array([[point["lat"], point["lng"]] for point in category_points])
+    X_category = np.array([get_feature_vector(point["lat"], point["lng"], use_city_center) for point in category_points])
     
     # Find nearest neighbors within the predicted category
     if len(category_points) > 0:
-        category_knn = NearestNeighbors(n_neighbors=min(k, len(category_points)))
+        category_knn = NearestNeighbors(n_neighbors=min(k, len(category_points)), metric='euclidean')
         category_knn.fit(X_category)
         distances, indices = category_knn.kneighbors(query_point)
         

@@ -82,6 +82,9 @@
             <label>
                 <input type="radio" name="mode" value="classification"> Classification
             </label>
+            <label>
+                <input type="radio" name="mode" value="classification_city"> Classification + City Center
+            </label>
         </div>
     </div>
     
@@ -150,8 +153,10 @@
             const mode = document.querySelector('input[name="mode"]:checked').value;
             if (mode === "search") {
                 performKNNSearch(event.latLng.lat(), event.latLng.lng());
-            } else {
-                performKNNClassification(event.latLng.lat(), event.latLng.lng());
+            } else if (mode === "classification") {
+                performKNNClassification(event.latLng.lat(), event.latLng.lng(), false);
+            } else if (mode === "classification_city") {
+                performKNNClassification(event.latLng.lat(), event.latLng.lng(), true);
             }
         });
 
@@ -176,9 +181,12 @@
                     if (mode === "search") {
                         instructionText.textContent = "Click on the map to find nearest neighbors";
                         resultsTitle.textContent = "KNN Search Results:";
-                    } else {
+                    } else if (mode === "classification") {
                         instructionText.textContent = "Click on the map to classify the location";
                         resultsTitle.textContent = "KNN Classification Results:";
+                    } else if (mode === "classification_city") {
+                        instructionText.textContent = "Click on the map to classify the location (with city center distance)";
+                        resultsTitle.textContent = "KNN Classification + City Center Results:";
                     }
                 }
                 
@@ -193,6 +201,7 @@
 
     function performKNNSearch(lat, lng) {
         const k = parseInt(document.getElementById("kNeighbors").value) || 3;
+        const useCityCenter = false; // Search mode doesn't use city center feature
 
         // Remove previous click marker
         if (clickMarker) {
@@ -213,7 +222,7 @@
             headers: {
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify({ lat: lat, lng: lng, k: k })
+            body: JSON.stringify({ lat: lat, lng: lng, k: k, use_city_center: useCityCenter })
         })
         .then(response => response.json())
         .then(data => {
@@ -222,7 +231,7 @@
         .catch(error => console.error("Error:", error));
     }
 
-    function performKNNClassification(lat, lng) {
+    function performKNNClassification(lat, lng, useCityCenter = false) {
         const k = parseInt(document.getElementById("kNeighbors").value) || 3;
 
         // Remove previous click marker
@@ -244,7 +253,7 @@
             headers: {
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify({ lat: lat, lng: lng, k: k })
+            body: JSON.stringify({ lat: lat, lng: lng, k: k, use_city_center: useCityCenter })
         })
         .then(response => response.json())
         .then(data => {
