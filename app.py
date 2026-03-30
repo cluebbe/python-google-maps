@@ -125,20 +125,19 @@ def knn_search():
     lat = data.get("lat")
     lng = data.get("lng")
     k = data.get("k", 3)  # Default to 3 neighbors
-    use_city_center = data.get("use_city_center", False)
     
     if lat is None or lng is None:
         return jsonify({"error": "Missing lat/lng"}), 400
     
-    # Extract feature vectors from data points
-    X = np.array([get_feature_vector(point["lat"], point["lng"], use_city_center) for point in data_points])
+    # Extract feature vectors from data points (city center distance not used for search)
+    X = np.array([get_feature_vector(point["lat"], point["lng"], False) for point in data_points])
     
     # Find nearest neighbors using Euclidean distance
     knn = NearestNeighbors(n_neighbors=min(k, len(data_points)), metric='euclidean')
     knn.fit(X)
     
-    # Query point
-    query_point = np.array([get_feature_vector(lat, lng, use_city_center)]).reshape(1, -1)
+    # Query point (search always uses lat/lng only)
+    query_point = np.array([get_feature_vector(lat, lng, False)]).reshape(1, -1)
     
     # Find nearest neighbors
     distances, indices = knn.kneighbors(query_point)
