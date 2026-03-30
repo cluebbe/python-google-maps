@@ -105,6 +105,31 @@ data_points = [
         "description": "Professional car repair shop",
         "icon": "https://maps.google.com/mapfiles/ms/icons/green-dot.png",
         "category": "car_workshop"
+    },
+    # Construction shops cluster (outskirts) - BLUE markers
+    {
+        "lat": 40.4440,
+        "lng": -3.7240,
+        "title": "Madrid Construction Depot",
+        "description": "Building materials and contractor equipment",
+        "icon": "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+        "category": "construction_shop"
+    },
+    {
+        "lat": 40.4485,
+        "lng": -3.7330,
+        "title": "La Vaguada Construction Hub",
+        "description": "Outdoor equipment and supplies",
+        "icon": "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+        "category": "construction_shop"
+    },
+    {
+        "lat": 40.4500,
+        "lng": -3.7460,
+        "title": "Alcobendas Construction Center",
+        "description": "Heavy machinery and tool rentals",
+        "icon": "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+        "category": "construction_shop"
     }
 ]
 
@@ -217,10 +242,7 @@ def knn_classification():
     return jsonify({
         "query": {"lat": lat, "lng": lng},
         "predicted_category": predicted_category,
-        "probabilities": {
-            class_names[0]: float(probabilities[0]),
-            class_names[1]: float(probabilities[1])
-        },
+        "probabilities": {class_names[i]: float(probabilities[i]) for i in range(len(class_names))},
         "similar_points": similar_points
     })
 

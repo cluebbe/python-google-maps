@@ -317,12 +317,18 @@
         // Add classification result
         const classificationItem = document.createElement("div");
         classificationItem.className = "result-item";
+
+        let confidenceHtml = '<strong>Confidence:</strong><br>';
+        for (const category in data.probabilities) {
+            if (Object.prototype.hasOwnProperty.call(data.probabilities, category)) {
+                confidenceHtml += `${category.replace('_', ' ')}: ${(data.probabilities[category] * 100).toFixed(1)}%<br>`;
+            }
+        }
+
         classificationItem.innerHTML = `
             <div class="result-title" style="color: #2e7d32;">Predicted Category: ${data.predicted_category}</div>
             <div style="font-size: 12px; margin: 5px 0;">
-                <strong>Confidence:</strong><br>
-                Restaurant: ${(data.probabilities.restaurant * 100).toFixed(1)}%<br>
-                Car Workshop: ${(data.probabilities.car_workshop * 100).toFixed(1)}%
+                ${confidenceHtml}
             </div>
         `;
         resultsList.appendChild(classificationItem);
@@ -342,8 +348,10 @@
                     title: point.title,
                     label: String(index + 1),
                     icon: data.predicted_category === "restaurant" ? 
-                        "http://maps.google.com/mapfiles/ms/icons/red-dot.png" : 
-                        "http://maps.google.com/mapfiles/ms/icons/green-dot.png"
+                        "http://maps.google.com/mapfiles/ms/icons/red-dot.png" :
+                        data.predicted_category === "car_workshop" ?
+                        "http://maps.google.com/mapfiles/ms/icons/green-dot.png" :
+                        "http://maps.google.com/mapfiles/ms/icons/blue-dot.png"
                 });
                 resultMarkers.push(resultMarker);
 
